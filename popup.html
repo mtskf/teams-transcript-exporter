@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Teams Transcript Exporter</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      width: 420px; padding: 20px; background: #1a1a2e; color: #eaeaea;
+    }
+    h1 { font-size: 18px; margin-bottom: 15px; color: #7b68ee; display: flex; align-items: center; gap: 10px; }
+    h1::before { content: '📝'; font-size: 24px; }
+    .status { padding: 10px 15px; border-radius: 8px; margin-bottom: 15px; font-size: 13px; line-height: 1.4; }
+    .status.info { background: #16213e; border-left: 4px solid #7b68ee; }
+    .status.success { background: #0f3d3e; border-left: 4px solid #4ade80; }
+    .status.error { background: #3d1f1f; border-left: 4px solid #f87171; }
+    .button-group { display: flex; flex-direction: column; gap: 10px; margin-bottom: 15px; }
+    button {
+      padding: 12px 20px; border: none; border-radius: 8px; cursor: pointer;
+      font-size: 14px; font-weight: 500; transition: all 0.2s ease;
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+    }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-primary { background: linear-gradient(135deg, #7b68ee, #5b4fcf); color: white; }
+    .btn-primary:hover:not(:disabled) { background: linear-gradient(135deg, #8b7af8, #6b5fdf); transform: translateY(-1px); }
+    .btn-secondary { background: #2d2d44; color: #eaeaea; border: 1px solid #3d3d5c; }
+    .btn-secondary:hover:not(:disabled) { background: #3d3d5c; }
+    .info-section { background: #16213e; border-radius: 8px; padding: 15px; margin-bottom: 15px; }
+    .info-section h3 { font-size: 12px; color: #888; text-transform: uppercase; margin-bottom: 8px; }
+    .info-section .value { font-size: 14px; color: #eaeaea; word-break: break-word; }
+    .info-section .sub-value { font-size: 12px; color: #888; margin-top: 4px; }
+    .participants { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+    .participant { background: #2d2d44; padding: 4px 10px; border-radius: 12px; font-size: 12px; }
+    .participant.organizer { border: 1px solid #7b68ee; }
+    .preview { background: #16213e; border-radius: 8px; padding: 15px; margin-top: 15px; max-height: 200px; overflow-y: auto; }
+    .preview h3 { font-size: 14px; color: #7b68ee; margin-bottom: 10px; }
+    .entry { padding: 10px; margin-bottom: 8px; background: #1a1a2e; border-radius: 6px; font-size: 12px; }
+    .entry .speaker { color: #7b68ee; font-weight: 600; }
+    .entry .timestamp { color: #888; margin-left: 8px; font-size: 11px; }
+    .entry .text { margin-top: 5px; color: #ccc; line-height: 1.4; }
+    .count { color: #888; font-size: 12px; margin-top: 10px; }
+    .spinner { width: 16px; height: 16px; border: 2px solid #ffffff40; border-top-color: #ffffff; border-radius: 50%; animation: spin 0.8s linear infinite; display: inline-block; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .options { background: #16213e; border-radius: 8px; padding: 15px; margin-bottom: 15px; }
+    .options label { display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; margin-bottom: 8px; }
+    .options label:last-child { margin-bottom: 0; }
+    .options input[type="checkbox"] { width: 16px; height: 16px; accent-color: #7b68ee; }
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+  <h1>Teams Transcript Exporter</h1>
+  <div id="status" class="status info">Open a Microsoft Teams meeting Recap to export transcript.</div>
+  <div id="meetingInfo" class="info-section hidden">
+    <h3>Meeting</h3>
+    <div id="meetingTitle" class="value"></div>
+    <div id="meetingDateTime" class="sub-value"></div>
+  </div>
+  <div id="participantsSection" class="info-section hidden">
+    <h3>Participants (<span id="participantCount">0</span>)</h3>
+    <div id="participantsList" class="participants"></div>
+  </div>
+  <div class="options">
+    <label><input type="checkbox" id="scrollToLoad" checked> Auto-scroll to load all content</label>
+    <label><input type="checkbox" id="includeTimestamps" checked> Include timestamps in export</label>
+  </div>
+  <div class="button-group">
+    <button id="extractBtn" class="btn-primary"><span>📥</span> Extract Transcript</button>
+    <button id="downloadBtn" class="btn-secondary" disabled><span>💾</span> Download JSON</button>
+  </div>
+  <div id="preview" class="preview hidden">
+    <h3>Preview</h3>
+    <div id="entries"></div>
+    <div id="count" class="count"></div>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>

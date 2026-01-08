@@ -1,0 +1,41 @@
+{
+  "manifest_version": 3,
+  "name": "Teams Transcript Exporter",
+  "version": "1.0.0",
+  "description": "Export Microsoft Teams meeting transcripts to JSON with meeting info and participants",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "downloads"
+  ],
+  "host_permissions": [
+    "https://teams.microsoft.com/*",
+    "https://*.microsoft.com/*",
+    "https://*.office.com/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icon16.png",
+      "48": "icon48.png",
+      "128": "icon128.png"
+    }
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://teams.microsoft.com/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "all_frames": true,
+      "run_at": "document_idle"
+    }
+  ],
+  "icons": {
+    "16": "icon16.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
+  }
+}
