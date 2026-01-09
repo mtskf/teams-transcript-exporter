@@ -1,263 +1,221 @@
-// Teams Transcript Exporter - Content Script
-// Works with any Teams meeting Recap/Transcript
-(function() {
-  'use strict';
+console.log('🔵 Content script loaded!', window.location.href);
+console.log('Is iframe?', window.self !== window.top);
 
-  chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    const handlers = {
-      'getMeetingInfo': () => extractMeetingInfo(),
-      'getParticipants': () => extractParticipants(),
-      'extractTranscript': () => extractTranscript(),
-      'scrollAndExtract': () => scrollAndExtractAll()
-    };
 
-    const handler = handlers[request.action];
-    if (handler) {
-      Promise.resolve(handler()).then(data => {
-        sendResponse({ success: true, data });
-      }).catch(error => {
-        sendResponse({ success: false, error: error.message });
-      });
+// ========== 親ページ（teams.microsoft.com）用 ==========
+if (window.self === window.top) {
+
+  const NEWLINE = String.fromCharCode(10);
+
+  // popup からのメッセージを受信
+  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message.action === 'START_SCRAPING') {
+      console.log('Starting scraping process...');
+
+      // ミーティングタイトルを取得
+      let meetingTitle = 'Teams Meeting';
+      const titleEl = document.querySelector('[class*="title"], [class*="Title"], h1, h2');
+      if (titleEl) {
+        const text = titleEl.innerText.trim();
+        if (text && !text.includes('Oops') && !text.includes('Content') && !text.includes('Transcript')) {
+          meetingTitle = text;
+        }
+      }
+
+      // 別の方法でタイトルを探す
+      if (meetingTitle === 'Teams Meeting') {
+        const allElements = document.querySelectorAll('span, div');
+        for (const el of allElements) {
+          const text = el.innerText?.trim();
+          if (text && text.includes("1:1") || (text && text.length > 5 && text.length < 100 && !text.includes('Oops') && !text.includes('\\n') && el.offsetWidth > 200)) {
+            const style = getComputedStyle(el);
+            if (parseInt(style.fontSize) >= 18) {
+              meetingTitle = text;
+              break;
+            }
+          }
+        }
+      }
+
+      // 日付を取得
+      let meetingDate = '';
+      let meetingDateFormatted = '';
+      const dateButton = document.querySelector('button[role="combobox"]');
+      if (dateButton) {
+        const dateText = dateButton.innerText.trim();
+        meetingDate = dateText;
+        const dateMatch = dateText.match(/(\\d{1,2})\\s+(\\w+)(?:\\s+(\\d{4}))?/);
+        if (dateMatch) {
+          const day = dateMatch[1].padStart(2, '0');
+          const monthName = dateMatch[2];
+          const year = dateMatch[3] || new Date().getFullYear();
+          const months = {
+            'January': '01', 'February': '02', 'March': '03', 'April': '04',
+            'May': '05', 'June': '06', 'July': '07', 'August': '08',
+            'September': '09', 'October': '10', 'November': '11', 'December': '12'
+          };
+          const month = months[monthName] || '01';
+          meetingDateFormatted = `${year}${month}${day}`;
+        }
+      }
+
+      console.log('Meeting info:', { title: meetingTitle, date: meetingDate, formatted: meetingDateFormatted });
+
+      // ミーティング情報を保存
+      window._meetingInfo = {
+        title: meetingTitle,
+        date: meetingDate,
+        dateFormatted: meetingDateFormatted
+      };
+
+      // iframe にメッセージを送信
+      const iframe = document.getElementById('xplatIframe');
+      if (iframe && iframe.contentWindow) {
+        iframe.contentWindow.postMessage({ type: 'START_SCRAPING_IFRAME' }, '*');
+        sendResponse({ success: true });
+      } else {
+        sendResponse({ success: false, error: 'Iframe not found.' });
+      }
+
       return true;
     }
   });
 
-  function extractMeetingInfo() {
-    const info = { title: '', dateTime: '', url: window.location.href };
+  // iframe からのメッセージを受信
+  window.addEventListener('message', (event) => {
+    if (event.data.type === 'TRANSCRIPT_COLLECTED') {
+      console.log('✅ Transcript received:', event.data.itemCount, 'items');
 
-    // Find meeting title in headings
-    const headings = document.querySelectorAll('h1, h2, [role="heading"]');
-    for (const h of headings) {
-      const text = h.innerText?.trim();
-      if (text && text.length > 5 && 
-          !['Chat', 'Content', 'Oops', 'Notes', 'Transcript', 'Recap'].includes(text)) {
-        info.title = text;
-        break;
+      const NEWLINE = String.fromCharCode(10);
+      const meetingInfo = window._meetingInfo || { title: 'Teams Meeting', date: '', dateFormatted: '' };
+      const lines = [];
+
+      lines.push(`# ${meetingInfo.title}`);
+      lines.push('');
+      if (meetingInfo.date) {
+        lines.push(`Date: ${meetingInfo.date}`);
+        lines.push('');
       }
-    }
+      lines.push('---');
+      lines.push('');
+      lines.push('## Transcript');
+      lines.push('');
 
-    // Find date/time patterns
-    const datePatterns = [
-      /w+,s+w+s+d{1,2},s+d{4}s+d{1,2}:d{2}s*(AM|PM)s*-s*d{1,2}:d{2}s*(AM|PM)/i,
-      /w+,s+w+s+d{1,2},s+d{4}/i
-    ];
+      event.data.transcriptData.forEach(item => {
+        lines.push(`### ${item.speaker} — ${item.timestamp}`);
+        lines.push('');
+        lines.push(item.text);
+        lines.push('');
+      });
 
-    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
-    let node;
-    while (node = walker.nextNode()) {
-      const text = node.textContent?.trim();
-      if (!text) continue;
-      for (const pattern of datePatterns) {
-        const match = text.match(pattern);
-        if (match) {
-          info.dateTime = match[0];
-          break;
-        }
-      }
-      if (info.dateTime) break;
-    }
+      const markdown = lines.join(NEWLINE);
 
-    return info;
-  }
-
-  function extractParticipants() {
-    const participants = [];
-    const seen = new Set();
-
-    const selectors = ['[role="menuitem"]', '[role="listitem"]', '[class*="participant"]'];
-
-    for (const selector of selectors) {
-      document.querySelectorAll(selector).forEach(item => {
-        const text = item.innerText?.trim();
-        if (!text || /^(Add|Leave|Remove|People|d+$)/i.test(text)) return;
-
-        const lines = text.split('
-').map(l => l.trim()).filter(Boolean);
-        if (lines.length === 0) return;
-
-        const name = lines[0];
-        if (name.length < 2 || name.length > 50 || seen.has(name)) return;
-        if (!/^[A-Za-z]/.test(name)) return;
-
-        const participant = { name };
-        const fullText = text.toLowerCase();
-        if (fullText.includes('organizer')) participant.role = 'Organizer';
-        if (fullText.includes('you')) participant.isCurrentUser = true;
-
-        const statusImg = item.querySelector('img[alt]');
-        if (statusImg) {
-          const alt = statusImg.alt;
-          if (['Available', 'Away', 'Busy', 'Offline', 'Out of office'].includes(alt)) {
-            participant.status = alt;
-          }
-        }
-
-        seen.add(name);
-        participants.push(participant);
+      chrome.runtime.sendMessage({
+        action: 'TRANSCRIPT_READY',
+        transcript: markdown,
+        itemCount: event.data.itemCount,
+        length: markdown.length,
+        dateFormatted: meetingInfo.dateFormatted
+      });
+    } else if (event.data.type === 'SCRAPING_ERROR') {
+      console.error('Scraping error:', event.data.error);
+      chrome.runtime.sendMessage({
+        action: 'SCRAPING_ERROR',
+        error: event.data.error
       });
     }
+  });
+}
 
-    return participants;
-  }
 
-  async function extractTranscript() {
-    const entries = [];
-    const seen = new Set();
+// ========== iframe（sharepoint.com）用 ==========
+if (window.self !== window.top) {
+  console.log('🟢 Running inside iframe:', window.location.href);
 
-    // Try multiple extraction strategies
-    const results = [
-      ...extractFromTextPatterns(),
-      ...extractFromAriaLabels()
-    ];
+  window.addEventListener('message', async (event) => {
+    if (event.data.type === 'START_SCRAPING_IFRAME') {
+      console.log('🟢 Received scraping request in iframe');
 
-    for (const entry of results) {
-      const key = entry.speaker + '|' + entry.timestamp + '|' + entry.text;
-      if (!seen.has(key) && entry.text) {
-        seen.add(key);
-        entries.push(entry);
-      }
-    }
+      try {
+        const transcriptData = [];
+        const seenTexts = new Set();
+        const NEWLINE = String.fromCharCode(10);
 
-    entries.sort((a, b) => parseTimestamp(a.timestamp) - parseTimestamp(b.timestamp));
-    return entries;
-  }
+        // スクロールコンテナを探す
+        const scrollContainer = document.querySelector('[class*="focusZoneWithAutoScroll"]');
 
-  function extractFromTextPatterns() {
-    const entries = [];
-    const elements = document.querySelectorAll('div, p, span');
-    
-    for (const el of elements) {
-      if (el.children.length > 5) continue;
-      
-      const text = el.innerText?.trim();
-      if (!text || text.length > 2000 || text.length < 10) continue;
+        if (!scrollContainer) {
+          throw new Error('Scroll container not found');
+        }
 
-      const lines = text.split('
-').map(l => l.trim()).filter(Boolean);
-      
-      let currentSpeaker = '';
-      let currentTimestamp = '';
-      let messageLines = [];
+        console.log('Found scroll container');
 
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
-        const speakerMatch = line.match(/^([A-Z][a-z]+(?:s+[A-Z][a-z'-]+)*)s+(d{1,2}:d{2}(?::d{2})?)$/);
-        
-        if (speakerMatch) {
-          if (currentSpeaker && messageLines.length > 0) {
-            entries.push({
-              speaker: currentSpeaker,
-              timestamp: currentTimestamp,
-              text: messageLines.join(' ').trim()
-            });
+        // 最初にトップにスクロール
+        scrollContainer.scrollTop = 0;
+        await new Promise(r => setTimeout(r, 500));
+
+        let lastScrollTop = -1;
+        let noChangeCount = 0;
+
+        // スクロールしながら収集
+        while (noChangeCount < 5) {
+          // 少し待ってレンダリングを待つ
+          await new Promise(r => setTimeout(r, 500));
+
+          // 現在表示されているセルを収集
+          const cells = document.querySelectorAll('.ms-List-cell');
+
+          cells.forEach(cell => {
+            const text = cell.innerText?.trim() || '';
+            if (text && !seenTexts.has(text) && text.length > 5 && !text.includes('started transcription')) {
+              seenTexts.add(text);
+
+              const lines = text.split(NEWLINE).filter(l => l.trim());
+
+              // 形式: "Speaker名", "X minutes Y seconds", "X:XX", "Speaker名 X minutes Y seconds", "実際のテキスト"
+              if (lines.length >= 5) {
+                const speaker = lines[0];
+                const timestamp = lines[2]; // "0:23" 形式
+                const content = lines.slice(4).join(' '); // 5行目以降がテキスト
+
+                if (speaker && content) {
+                  transcriptData.push({ speaker, timestamp, text: content });
+                }
+              }
+            }
+          });
+
+          console.log(`Collected ${transcriptData.length} items, scrollTop: ${scrollContainer.scrollTop}`);
+
+          // スクロールダウン
+          scrollContainer.scrollTop += 300;
+          await new Promise(r => setTimeout(r, 300));
+
+          // スクロール位置が変わったかチェック
+          if (scrollContainer.scrollTop === lastScrollTop) {
+            noChangeCount++;
+          } else {
+            noChangeCount = 0;
           }
-          currentSpeaker = speakerMatch[1];
-          currentTimestamp = speakerMatch[2];
-          messageLines = [];
-        } else if (currentSpeaker) {
-          if (!line.includes('started transcription') && !line.includes('AI-generated') && !line.includes('Search')) {
-            messageLines.push(line);
-          }
+          lastScrollTop = scrollContainer.scrollTop;
         }
-      }
-      
-      if (currentSpeaker && messageLines.length > 0) {
-        entries.push({
-          speaker: currentSpeaker,
-          timestamp: currentTimestamp,
-          text: messageLines.join(' ').trim()
-        });
+
+        console.log('🟢 Scraping complete:', transcriptData.length, 'items');
+
+        // 親ウィンドウに結果を送信
+        window.parent.postMessage({
+          type: 'TRANSCRIPT_COLLECTED',
+          transcriptData: transcriptData,
+          itemCount: transcriptData.length
+        }, '*');
+
+      } catch (error) {
+        console.error('Scraping error:', error);
+        window.parent.postMessage({
+          type: 'SCRAPING_ERROR',
+          error: error.message
+        }, '*');
       }
     }
-
-    return entries;
-  }
-
-  function extractFromAriaLabels() {
-    const entries = [];
-    document.querySelectorAll('[aria-label]').forEach(el => {
-      const label = el.getAttribute('aria-label') || '';
-      const match = label.match(/^([^,]+),s*(d{1,2}:d{2}(?::d{2})?),?s*(.*)$/);
-      if (match && match[3]) {
-        entries.push({
-          speaker: match[1].trim(),
-          timestamp: match[2].trim(),
-          text: match[3].trim() || el.innerText?.trim() || ''
-        });
-      }
-    });
-    return entries;
-  }
-
-  async function scrollAndExtractAll() {
-    const allEntries = [];
-    const seen = new Set();
-    const scrollContainers = findScrollableContainers();
-    
-    if (scrollContainers.length === 0) {
-      return extractTranscript();
-    }
-
-    for (const container of scrollContainers) {
-      container.scrollTop = 0;
-      await sleep(300);
-      
-      let previousScrollTop = -1;
-      let stuckCount = 0;
-      
-      for (let i = 0; i < 100; i++) {
-        const currentEntries = await extractTranscript();
-        for (const entry of currentEntries) {
-          const key = entry.speaker + '|' + entry.timestamp + '|' + entry.text;
-          if (!seen.has(key) && entry.text) {
-            seen.add(key);
-            allEntries.push(entry);
-          }
-        }
-        
-        container.scrollBy({ top: 400, behavior: 'smooth' });
-        await sleep(400);
-        
-        if (Math.abs(container.scrollTop - previousScrollTop) < 10) {
-          stuckCount++;
-          if (stuckCount >= 3) break;
-        } else {
-          stuckCount = 0;
-        }
-        previousScrollTop = container.scrollTop;
-      }
-    }
-
-    allEntries.sort((a, b) => parseTimestamp(a.timestamp) - parseTimestamp(b.timestamp));
-    return allEntries;
-  }
-
-  function findScrollableContainers() {
-    const containers = [];
-    document.querySelectorAll('*').forEach(el => {
-      const style = window.getComputedStyle(el);
-      if ((style.overflowY === 'auto' || style.overflowY === 'scroll') && el.scrollHeight > el.clientHeight + 50) {
-        const text = el.innerText || '';
-        if (/d{1,2}:d{2}/.test(text) && text.length > 100) {
-          containers.push(el);
-        }
-      }
-    });
-    containers.sort((a, b) => a.scrollHeight - b.scrollHeight);
-    return containers.slice(0, 3);
-  }
-
-  function parseTimestamp(ts) {
-    if (!ts) return 0;
-    const parts = ts.split(':').map(Number);
-    if (parts.length === 2) return parts[0] * 60 + parts[1];
-    if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
-    return 0;
-  }
-
-  function sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
-  }
-
-  console.log('[Teams Transcript Exporter] Loaded');
-})();
+  });
+}
