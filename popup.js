@@ -14,7 +14,7 @@ document.getElementById('scrapeBtn').addEventListener('click', async () => {
     console.log('Tab:', tab.id, tab.url);
 
     // Teams の Recap ページかチェック
-    if (!tab.url.includes('teams.microsoft.com')) {
+    if (!tab.url.includes('teams.microsoft.com') && !tab.url.includes('teams.cloud.microsoft')) {
       throw new Error('Please open a Teams Recap page first');
     }
 

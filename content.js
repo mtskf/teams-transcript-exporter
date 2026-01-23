@@ -83,6 +83,8 @@ if (window.self === window.top) {
 
   // iframe からのメッセージを受信
   window.addEventListener('message', (event) => {
+    if (!event.data || !event.data.type) return;
+
     if (event.data.type === 'TRANSCRIPT_COLLECTED') {
       console.log('✅ Transcript received:', event.data.itemCount, 'items');
 
@@ -133,6 +135,8 @@ if (window.self !== window.top) {
   console.log('🟢 Running inside iframe:', window.location.href);
 
   window.addEventListener('message', async (event) => {
+    if (!event.data || !event.data.type) return;
+
     if (event.data.type === 'START_SCRAPING_IFRAME') {
       console.log('🟢 Received scraping request in iframe');
 
