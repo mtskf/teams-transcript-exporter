@@ -3,7 +3,10 @@
   "name": "Teams Transcript Scraper",
   "version": "1.0",
   "description": "Extract transcripts from Microsoft Teams Recap",
-  "permissions": ["activeTab", "scripting"],
+  "permissions": ["activeTab", "scripting", "downloads"],
+  "background": {
+    "service_worker": "background.js"
+  },
   "host_permissions": [
     "<all_urls>"
   ],

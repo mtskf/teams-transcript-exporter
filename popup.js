@@ -58,19 +58,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === 'TRANSCRIPT_READY') {
     status.className = 'success';
     status.textContent = `✓ Extracted ${message.itemCount} items (${message.length} chars)`;
-
-    // ファイル名を生成
-    const dateStr = message.dateFormatted || new Date().toISOString().slice(0, 10).replace(/-/g, '');
-    const filename = `transcript_${dateStr}.md`;
-
-    // Markdownファイルとしてダウンロード
-    const blob = new Blob([message.transcript], { type: 'text/markdown' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    a.click();
-
     button.disabled = false;
     button.textContent = 'Extract Transcript';
   } else if (message.action === 'SCRAPING_ERROR') {

@@ -14,41 +14,24 @@ if (window.self === window.top) {
 
       // ミーティングタイトルを取得
       let meetingTitle = 'Teams Meeting';
-      const titleEl = document.querySelector('[class*="title"], [class*="Title"], h1, h2');
-      if (titleEl) {
-        const text = titleEl.innerText.trim();
-        if (text && !text.includes('Oops') && !text.includes('Content') && !text.includes('Transcript')) {
-          meetingTitle = text;
-        }
+      const titleSpan = document.querySelector('[data-tid="chat-title"] span[title]');
+      if (titleSpan) {
+        meetingTitle = titleSpan.getAttribute('title') || titleSpan.innerText.trim() || meetingTitle;
       }
 
-      // 別の方法でタイトルを探す
-      if (meetingTitle === 'Teams Meeting') {
-        const allElements = document.querySelectorAll('span, div');
-        for (const el of allElements) {
-          const text = el.innerText?.trim();
-          if (text && text.includes("1:1") || (text && text.length > 5 && text.length < 100 && !text.includes('Oops') && !text.includes('\\n') && el.offsetWidth > 200)) {
-            const style = getComputedStyle(el);
-            if (parseInt(style.fontSize) >= 18) {
-              meetingTitle = text;
-              break;
-            }
-          }
-        }
-      }
-
-      // 日付を取得
+      // 日付・時間を取得
       let meetingDate = '';
       let meetingDateFormatted = '';
-      const dateButton = document.querySelector('button[role="combobox"]');
-      if (dateButton) {
-        const dateText = dateButton.innerText.trim();
+      const dateEl = document.querySelector('[data-tid="intelligent-recap-header"] span');
+      if (dateEl) {
+        const dateText = dateEl.innerText.trim();
         meetingDate = dateText;
-        const dateMatch = dateText.match(/(\\d{1,2})\\s+(\\w+)(?:\\s+(\\d{4}))?/);
+        // "Friday, February 6, 2026 11:30 AM -  12:00 PM"
+        const dateMatch = dateText.match(/(\w+)\s+(\d{1,2}),\s+(\d{4})/);
         if (dateMatch) {
-          const day = dateMatch[1].padStart(2, '0');
-          const monthName = dateMatch[2];
-          const year = dateMatch[3] || new Date().getFullYear();
+          const monthName = dateMatch[1];
+          const day = dateMatch[2].padStart(2, '0');
+          const year = dateMatch[3];
           const months = {
             'January': '01', 'February': '02', 'March': '03', 'April': '04',
             'May': '05', 'June': '06', 'July': '07', 'August': '08',
