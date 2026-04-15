@@ -1,11 +1,14 @@
+if (window._teamsTranscriptLoaded) { /* already initialized */ }
+else {
+window._teamsTranscriptLoaded = true;
+
 console.log('🔵 Content script loaded!', window.location.href);
 console.log('Is iframe?', window.self !== window.top);
 
+const NEWLINE = '\n';
 
 // ========== 親ページ（teams.microsoft.com）用 ==========
 if (window.self === window.top) {
-
-  const NEWLINE = String.fromCharCode(10);
 
   // popup からのメッセージを受信
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -67,11 +70,14 @@ if (window.self === window.top) {
   // iframe からのメッセージを受信
   window.addEventListener('message', (event) => {
     if (!event.data || !event.data.type) return;
+    const iframe = document.getElementById('xplatIframe');
+    if (!iframe || event.source !== iframe.contentWindow) return;
 
     if (event.data.type === 'TRANSCRIPT_COLLECTED') {
       console.log('✅ Transcript received:', event.data.itemCount, 'items');
-
-      const NEWLINE = String.fromCharCode(10);
+      if (!window._meetingInfo) {
+        console.warn('[content] window._meetingInfo not set, using defaults. Race condition possible.');
+      }
       const meetingInfo = window._meetingInfo || { title: 'Teams Meeting', date: '', dateFormatted: '' };
       const lines = [];
 
@@ -101,12 +107,16 @@ if (window.self === window.top) {
         itemCount: event.data.itemCount,
         length: markdown.length,
         dateFormatted: meetingInfo.dateFormatted
+      }).catch(err => {
+        console.error('[content] Failed to send TRANSCRIPT_READY to background:', err);
       });
     } else if (event.data.type === 'SCRAPING_ERROR') {
       console.error('Scraping error:', event.data.error);
       chrome.runtime.sendMessage({
         action: 'SCRAPING_ERROR',
         error: event.data.error
+      }).catch(err => {
+        console.error('[content] Failed to send SCRAPING_ERROR to background:', err);
       });
     }
   });
@@ -126,7 +136,6 @@ if (window.self !== window.top) {
       try {
         const transcriptData = [];
         const seenTexts = new Set();
-        const NEWLINE = String.fromCharCode(10);
 
         // スクロールコンテナを探す
         const scrollContainer = document.querySelector('[class*="focusZoneWithAutoScroll"]');
@@ -168,6 +177,8 @@ if (window.self !== window.top) {
                 if (speaker && content) {
                   transcriptData.push({ speaker, timestamp, text: content });
                 }
+              } else {
+                console.warn('[iframe] Unexpected cell format, lines:', lines.length, cell.innerText?.slice(0, 80));
               }
             }
           });
@@ -190,6 +201,10 @@ if (window.self !== window.top) {
         console.log('🟢 Scraping complete:', transcriptData.length, 'items');
 
         // 親ウィンドウに結果を送信
+        if (transcriptData.length === 0) {
+          window.parent.postMessage({ type: 'SCRAPING_ERROR', error: 'No transcript items found.' }, '*');
+          return;
+        }
         window.parent.postMessage({
           type: 'TRANSCRIPT_COLLECTED',
           transcriptData: transcriptData,
@@ -206,3 +221,5 @@ if (window.self !== window.top) {
     }
   });
 }
+
+} // end guard
