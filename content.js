@@ -108,7 +108,13 @@ if (window.self === window.top) {
       lines.push('## Transcript');
       lines.push('');
 
-      event.data.transcriptData.forEach(item => {
+      const transcriptData = event.data.transcriptData;
+      if (!Array.isArray(transcriptData)) {
+        console.error('[content] transcriptData is not an array:', typeof transcriptData);
+        sendWithRetry({ action: 'SCRAPING_ERROR', error: 'Invalid transcript data received from iframe' }).catch(() => {});
+        return;
+      }
+      transcriptData.forEach(item => {
         lines.push(`### ${item.speaker || 'Unknown'} — ${item.timestamp || '?'}`);
         lines.push('');
         lines.push(item.text || '');
@@ -139,16 +145,16 @@ if (window.self === window.top) {
 }
 
 
-// ========== iframe（sharepoint.com）用 ==========
+// ========== iframe 用 ==========
 if (window.self !== window.top) {
   console.log('🟢 Running inside iframe:', window.location.href);
 
   window.addEventListener('message', async (event) => {
     if (!event.data || !event.data.type) return;
     if (event.origin !== 'https://teams.microsoft.com'
-        && !event.origin.endsWith('.teams.microsoft.com')
+        && !(event.origin.startsWith('https://') && event.origin.endsWith('.teams.microsoft.com'))
         && event.origin !== 'https://teams.cloud.microsoft'
-        && !event.origin.endsWith('.teams.cloud.microsoft')) return;
+        && !(event.origin.startsWith('https://') && event.origin.endsWith('.teams.cloud.microsoft'))) return;
 
     if (event.data.type === 'START_SCRAPING_IFRAME') {
       console.log('🟢 Received scraping request in iframe');
