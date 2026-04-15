@@ -15,3 +15,6 @@
   - 現在の innerText 全体比較は機能的に問題ないが可読性が低い
 - [ ] DOM パーサーの高スキップ率検出 — スキップ数が全セル数の一定割合を超えたら警告 (content.js)
 - [ ] スクロール停止判定の改善 — 仮想スクロールの丸め誤差対策 (content.js:191-200)
+- [ ] manifest.json の content_scripts ブロックと programmatic injection (background.js) の二重注入を解消
+  - content_scripts を削除し programmatic injection のみにするか、逆に programmatic injection を削除するか要検討
+  - 動作変更を伴うため十分なテストが必要

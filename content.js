@@ -5,12 +5,27 @@ window._teamsTranscriptLoaded = true;
 console.log('🔵 Content script loaded!', window.location.href);
 console.log('Is iframe?', window.self !== window.top);
 
-const NEWLINE = '\n';
+const MONTH_NAME_TO_NUMBER = {
+  'January': '01', 'February': '02', 'March': '03', 'April': '04',
+  'May': '05', 'June': '06', 'July': '07', 'August': '08',
+  'September': '09', 'October': '10', 'November': '11', 'December': '12'
+};
 
 // ========== 親ページ（teams.microsoft.com）用 ==========
 if (window.self === window.top) {
 
-  // popup からのメッセージを受信
+  function sendWithRetry(msg, retries = 2) {
+    return chrome.runtime.sendMessage(msg).catch(err => {
+      if (retries > 0) {
+        console.warn(`[content] sendMessage failed, retrying (${retries} left):`, err.message);
+        return new Promise(r => setTimeout(r, 500)).then(() => sendWithRetry(msg, retries - 1));
+      }
+      console.error('[content] sendMessage failed after retries:', err);
+      throw err;
+    });
+  }
+
+  // background service worker からのメッセージを受信
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.action === 'START_SCRAPING') {
       console.log('Starting scraping process...');
@@ -35,13 +50,12 @@ if (window.self === window.top) {
           const monthName = dateMatch[1];
           const day = dateMatch[2].padStart(2, '0');
           const year = dateMatch[3];
-          const months = {
-            'January': '01', 'February': '02', 'March': '03', 'April': '04',
-            'May': '05', 'June': '06', 'July': '07', 'August': '08',
-            'September': '09', 'October': '10', 'November': '11', 'December': '12'
-          };
-          const month = months[monthName] || '01';
-          meetingDateFormatted = `${year}${month}${day}`;
+          const month = MONTH_NAME_TO_NUMBER[monthName];
+          if (!month) {
+            console.warn('[content] Unrecognized month name:', monthName, '— defaulting to raw date text');
+          } else {
+            meetingDateFormatted = `${year}${month}${day}`;
+          }
         }
       }
 
@@ -57,7 +71,9 @@ if (window.self === window.top) {
       // iframe にメッセージを送信
       const iframe = document.getElementById('xplatIframe');
       if (iframe && iframe.contentWindow) {
-        iframe.contentWindow.postMessage({ type: 'START_SCRAPING_IFRAME' }, '*');
+        let targetOrigin;
+        try { targetOrigin = new URL(iframe.src).origin; } catch { targetOrigin = '*'; }
+        iframe.contentWindow.postMessage({ type: 'START_SCRAPING_IFRAME' }, targetOrigin);
         sendResponse({ success: true });
       } else {
         sendResponse({ success: false, error: 'Iframe not found.' });
@@ -78,7 +94,7 @@ if (window.self === window.top) {
       if (!window._meetingInfo) {
         console.warn('[content] window._meetingInfo not set, using defaults. Race condition possible.');
       }
-      const meetingInfo = window._meetingInfo || { title: 'Teams Meeting', date: '', dateFormatted: '' };
+      const meetingInfo = window._meetingInfo || { title: 'Teams Meeting (metadata unavailable)', date: '', dateFormatted: '' };
       const lines = [];
 
       lines.push(`# ${meetingInfo.title}`);
@@ -99,24 +115,24 @@ if (window.self === window.top) {
         lines.push('');
       });
 
-      const markdown = lines.join(NEWLINE);
+      const markdown = lines.join('\n');
 
-      chrome.runtime.sendMessage({
+      sendWithRetry({
         action: 'TRANSCRIPT_READY',
         transcript: markdown,
         itemCount: event.data.itemCount,
         length: markdown.length,
         dateFormatted: meetingInfo.dateFormatted
       }).catch(err => {
-        console.error('[content] Failed to send TRANSCRIPT_READY to background:', err);
+        console.error('[content] Failed to deliver TRANSCRIPT_READY after retries:', err);
       });
     } else if (event.data.type === 'SCRAPING_ERROR') {
       console.error('Scraping error:', event.data.error);
-      chrome.runtime.sendMessage({
+      sendWithRetry({
         action: 'SCRAPING_ERROR',
         error: event.data.error
       }).catch(err => {
-        console.error('[content] Failed to send SCRAPING_ERROR to background:', err);
+        console.error('[content] Failed to deliver SCRAPING_ERROR after retries:', err);
       });
     }
   });
@@ -129,9 +145,14 @@ if (window.self !== window.top) {
 
   window.addEventListener('message', async (event) => {
     if (!event.data || !event.data.type) return;
+    if (event.origin !== 'https://teams.microsoft.com'
+        && !event.origin.endsWith('.teams.microsoft.com')
+        && event.origin !== 'https://teams.cloud.microsoft'
+        && !event.origin.endsWith('.teams.cloud.microsoft')) return;
 
     if (event.data.type === 'START_SCRAPING_IFRAME') {
       console.log('🟢 Received scraping request in iframe');
+      const parentOrigin = event.origin;
 
       try {
         const transcriptData = [];
@@ -167,7 +188,7 @@ if (window.self !== window.top) {
             if (text && !seenTexts.has(text) && text.length > 5 && !text.includes('started transcription')) {
               seenTexts.add(text);
 
-              const lines = text.split(NEWLINE).filter(l => l.trim());
+              const lines = text.split('\n').filter(l => l.trim());
 
               if (lines.length >= 2) {
                 let speaker, timestamp = '', content;
@@ -229,21 +250,21 @@ if (window.self !== window.top) {
         // 親ウィンドウに結果を送信
         if (transcriptData.length === 0) {
           const totalCells = document.querySelectorAll('.ms-List-cell').length;
-          window.parent.postMessage({ type: 'SCRAPING_ERROR', error: `No transcript items found. Total cells seen: ${totalCells}, skipped: ${skippedCount}` }, '*');
+          window.parent.postMessage({ type: 'SCRAPING_ERROR', error: `No transcript items found. Total cells seen: ${totalCells}, skipped: ${skippedCount}` }, parentOrigin);
           return;
         }
         window.parent.postMessage({
           type: 'TRANSCRIPT_COLLECTED',
           transcriptData: transcriptData,
           itemCount: transcriptData.length
-        }, '*');
+        }, parentOrigin);
 
       } catch (error) {
         console.error('Scraping error:', error);
         window.parent.postMessage({
           type: 'SCRAPING_ERROR',
           error: error.message
-        }, '*');
+        }, parentOrigin);
       }
     }
   });

@@ -6,10 +6,10 @@ let _badgeTimer = null;
 
 function showBadge(text, color, duration) {
   if (_badgeTimer) clearTimeout(_badgeTimer);
-  chrome.action.setBadgeText({ text });
-  chrome.action.setBadgeBackgroundColor({ color });
+  chrome.action.setBadgeText({ text }).catch(() => {});
+  chrome.action.setBadgeBackgroundColor({ color }).catch(() => {});
   _badgeTimer = setTimeout(() => {
-    chrome.action.setBadgeText({ text: '' });
+    chrome.action.setBadgeText({ text: '' }).catch(() => {});
     _badgeTimer = null;
   }, duration);
 }
@@ -18,16 +18,19 @@ function showError() {
   showBadge('!', ERROR_COLOR, BADGE_DURATION_MS);
 }
 
-const EXTRACTION_TIMEOUT_MS = 60000;
+const EXTRACTION_TIMEOUT_MS = 180000;
 let isExtracting = false;
 let _extractionTimer = null;
 
 function startExtractionTimeout() {
-  _extractionTimer = setTimeout(() => failExtraction('Extraction timed out', 'no response within 60s'), EXTRACTION_TIMEOUT_MS);
+  _extractionTimer = setTimeout(() => failExtraction('Extraction timed out', 'no response within 180s'), EXTRACTION_TIMEOUT_MS);
 }
 
 function clearExtractionTimeout() {
-  if (_extractionTimer) { clearTimeout(_extractionTimer); _extractionTimer = null; }
+  if (_extractionTimer) {
+    clearTimeout(_extractionTimer);
+    _extractionTimer = null;
+  }
 }
 
 function failExtraction(reason, detail) {
@@ -39,7 +42,12 @@ function failExtraction(reason, detail) {
 
 function isTeamsUrl(url) {
   let hostname;
-  try { hostname = new URL(url || '').hostname; } catch { return false; }
+  try {
+    hostname = new URL(url || '').hostname;
+  } catch (err) {
+    console.warn('[background] Failed to parse tab URL:', url, err);
+    return false;
+  }
   return hostname === 'teams.microsoft.com'
       || hostname.endsWith('.teams.microsoft.com')
       || hostname === 'teams.cloud.microsoft'
@@ -57,31 +65,40 @@ chrome.action.onClicked.addListener(async (tab) => {
 
   isExtracting = true;
   startExtractionTimeout();
-  chrome.action.setBadgeText({ text: '...' });
-  chrome.action.setBadgeBackgroundColor({ color: PROGRESS_COLOR });
+  chrome.action.setBadgeText({ text: '...' }).catch(() => {});
+  chrome.action.setBadgeBackgroundColor({ color: PROGRESS_COLOR }).catch(() => {});
 
   try {
     await chrome.scripting.executeScript({
       target: { tabId: tab.id, allFrames: true },
       files: ['content.js']
     });
+    await new Promise(resolve => setTimeout(resolve, 100));
     const response = await chrome.tabs.sendMessage(tab.id, { action: 'START_SCRAPING' });
-    if (!response?.success) {
-      failExtraction('Content script error', response?.error);
+    if (response == null) {
+      failExtraction('Content script did not respond', 'response was null/undefined — listener may not be registered');
+    } else if (!response.success) {
+      failExtraction('Content script error', response.error || 'no error detail provided');
     }
   } catch (err) {
     failExtraction('sendMessage failed', err);
   }
 });
 
-chrome.runtime.onMessage.addListener((message) => {
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === 'TRANSCRIPT_READY') {
     clearExtractionTimeout();
     isExtracting = false;
 
     const transcript = message.transcript;
     if (!transcript) {
+      console.error('[background] TRANSCRIPT_READY received with empty/missing transcript:', {
+        transcript: typeof message.transcript,
+        itemCount: message.itemCount,
+        length: message.length,
+      });
       showError();
+      sendResponse({ received: true });
       return;
     }
 
@@ -95,11 +112,11 @@ chrome.runtime.onMessage.addListener((message) => {
         failExtraction('Download failed', chrome.runtime.lastError.message);
         return;
       }
-      chrome.action.setBadgeText({ text: '' });
+      chrome.action.setBadgeText({ text: '' }).catch(() => {});
     });
-  }
-
-  if (message.action === 'SCRAPING_ERROR') {
+    sendResponse({ received: true });
+  } else if (message.action === 'SCRAPING_ERROR') {
     failExtraction('Scraping error from content script', message.error);
+    sendResponse({ received: true });
   }
 });
