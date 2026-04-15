@@ -93,9 +93,9 @@ if (window.self === window.top) {
       lines.push('');
 
       event.data.transcriptData.forEach(item => {
-        lines.push(`### ${item.speaker} — ${item.timestamp}`);
+        lines.push(`### ${item.speaker || 'Unknown'} — ${item.timestamp || '?'}`);
         lines.push('');
-        lines.push(item.text);
+        lines.push(item.text || '');
         lines.push('');
       });
 

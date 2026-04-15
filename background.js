@@ -18,9 +18,20 @@ function showError() {
   showBadge('!', ERROR_COLOR, BADGE_DURATION_MS);
 }
 
+const EXTRACTION_TIMEOUT_MS = 60000;
 let isExtracting = false;
+let _extractionTimer = null;
+
+function startExtractionTimeout() {
+  _extractionTimer = setTimeout(() => failExtraction('Extraction timed out', 'no response within 60s'), EXTRACTION_TIMEOUT_MS);
+}
+
+function clearExtractionTimeout() {
+  if (_extractionTimer) { clearTimeout(_extractionTimer); _extractionTimer = null; }
+}
 
 function failExtraction(reason, detail) {
+  clearExtractionTimeout();
   console.error(`[background] ${reason}:`, detail);
   isExtracting = false;
   showError();
@@ -45,6 +56,7 @@ chrome.action.onClicked.addListener(async (tab) => {
   }
 
   isExtracting = true;
+  startExtractionTimeout();
   chrome.action.setBadgeText({ text: '...' });
   chrome.action.setBadgeBackgroundColor({ color: PROGRESS_COLOR });
 
@@ -64,6 +76,7 @@ chrome.action.onClicked.addListener(async (tab) => {
 
 chrome.runtime.onMessage.addListener((message) => {
   if (message.action === 'TRANSCRIPT_READY') {
+    clearExtractionTimeout();
     isExtracting = false;
 
     const transcript = message.transcript;
