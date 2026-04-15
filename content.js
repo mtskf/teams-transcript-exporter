@@ -152,6 +152,7 @@ if (window.self !== window.top) {
 
         let lastScrollTop = -1;
         let noChangeCount = 0;
+        let skippedCount = 0;
 
         // スクロールしながら収集
         while (noChangeCount < 5) {
@@ -179,6 +180,7 @@ if (window.self !== window.top) {
                 }
               } else {
                 console.warn('[iframe] Unexpected cell format, lines:', lines.length, cell.innerText?.slice(0, 80));
+                skippedCount++;
               }
             }
           });
@@ -198,11 +200,12 @@ if (window.self !== window.top) {
           lastScrollTop = scrollContainer.scrollTop;
         }
 
-        console.log('🟢 Scraping complete:', transcriptData.length, 'items');
+        console.log('🟢 Scraping complete:', transcriptData.length, 'items,', skippedCount, 'skipped');
 
         // 親ウィンドウに結果を送信
         if (transcriptData.length === 0) {
-          window.parent.postMessage({ type: 'SCRAPING_ERROR', error: 'No transcript items found.' }, '*');
+          const totalCells = document.querySelectorAll('.ms-List-cell').length;
+          window.parent.postMessage({ type: 'SCRAPING_ERROR', error: `No transcript items found. Total cells seen: ${totalCells}, skipped: ${skippedCount}` }, '*');
           return;
         }
         window.parent.postMessage({

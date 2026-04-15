@@ -18,13 +18,13 @@ function showError() {
   showBadge('!', ERROR_COLOR, BADGE_DURATION_MS);
 }
 
+let isExtracting = false;
+
 function failExtraction(reason, detail) {
   console.error(`[background] ${reason}:`, detail);
   isExtracting = false;
   showError();
 }
-
-let isExtracting = false;
 
 function isTeamsUrl(url) {
   let hostname;
@@ -39,6 +39,7 @@ chrome.action.onClicked.addListener(async (tab) => {
   if (isExtracting) return;
 
   if (!isTeamsUrl(tab.url)) {
+    console.error('[background] Not a Teams page:', tab.url);
     showError();
     return;
   }
