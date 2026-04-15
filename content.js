@@ -169,15 +169,39 @@ if (window.self !== window.top) {
 
               const lines = text.split(NEWLINE).filter(l => l.trim());
 
-              // 形式: "Speaker名", "X minutes Y seconds", "X:XX", "Speaker名 X minutes Y seconds", "実際のテキスト"
-              if (lines.length >= 5) {
-                const speaker = lines[0];
-                const timestamp = lines[2]; // "0:23" 形式
-                const content = lines.slice(4).join(' '); // 5行目以降がテキスト
+              if (lines.length >= 2) {
+                let speaker, timestamp = '', content;
+
+                if (lines.length >= 5) {
+                  // Legacy 5-line format: Speaker / RelTime / AbsTime / Label / Text...
+                  speaker = lines[0];
+                  timestamp = lines[2];
+                  content = lines.slice(4).join(' ');
+                } else {
+                  // Compact format (2-4 lines)
+                  // Line 1: "Speaker Name [relative-time]" e.g. "Mitsuki Fukunaga 3 minutes 29 seconds"
+                  // Remaining: text content (may include timestamp lines to filter)
+                  speaker = lines[0]
+                    .replace(/\s+(\d+\s+(seconds?|minutes?|hours?)\s*)+$/i, '')
+                    .trim();
+
+                  // Look for absolute timestamp (H:MM) in text
+                  const tsMatch = text.match(/(?:^|\n)(\d{1,2}:\d{2})(?:\n|$)/);
+                  if (tsMatch) timestamp = tsMatch[1];
+
+                  const contentLines = lines.slice(1).filter(l => {
+                    const t = l.trim();
+                    return !/^\d{1,2}:\d{2}$/.test(t) &&
+                           !/^(\d+\s+(seconds?|minutes?|hours?)\s*)+$/i.test(t);
+                  });
+                  content = contentLines.join(' ');
+                }
 
                 if (speaker && content) {
                   transcriptData.push({ speaker, timestamp, text: content });
                 }
+              } else if (lines.length === 1) {
+                // Single-line cell (speaker header, no text) — skip silently
               } else {
                 console.warn('[iframe] Unexpected cell format, lines:', lines.length, cell.innerText?.slice(0, 80));
                 skippedCount++;
