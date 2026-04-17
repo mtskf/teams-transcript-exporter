@@ -2,7 +2,20 @@
   "permissions": {
     "allow": [
       "Skill(commit)",
-      "Skill(commit:*)"
+      "Skill(review-cycle)",
+      "Skill(ship)",
+      "Skill(parallel-checks)",
+      "Skill(sync-main)",
+      "Skill(merge-pr)",
+      "Skill(review-plan)",
+      "Skill(review-pr)",
+      "Skill(resolve-conflict)",
+      "Skill(pr)",
+      "Skill(next-todo)",
+      "Skill(full-review)",
+      "Skill(ask-codex)",
+      "Skill(ask-gemini)",
+      "Skill(simplify)"
     ]
   }
 }
