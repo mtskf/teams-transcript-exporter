@@ -21,7 +21,7 @@
 - [ ] `onUpdated` リスナーでタブリロード時のリセットを追加 (background.js:151)
   - 現在は `changeInfo.url` のみ監視するためリロードを検出しない
   - リロードで content script コンテキストが破棄されるが `extractingTabId` がセットされたまま残る
-  - 既存の 180s タイムアウトがカバーするためリスクは低い
+  - 既存の 360s タイムアウトがカバーするためリスクは低い
 - [ ] manifest.json と background.js のサブドメインパターン不一致の解消
   - background.js は `*.teams.microsoft.com` を許可するが manifest は bare domain のみ
   - 実際に Teams がサブドメインを使用するか要調査
