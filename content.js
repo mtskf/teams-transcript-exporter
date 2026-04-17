@@ -124,9 +124,10 @@ if (window.self === window.top) {
         return;
       }
       transcriptData.forEach(item => {
-        lines.push(`### ${item.speaker || 'Unknown'} — ${item.timestamp || '?'}`);
+        if (!item || typeof item !== 'object') return;
+        lines.push(`### ${String(item.speaker || 'Unknown')} — ${String(item.timestamp || '?')}`);
         lines.push('');
-        lines.push(item.text || '');
+        lines.push(String(item.text || ''));
         lines.push('');
       });
 
@@ -286,7 +287,7 @@ if (window.self !== window.top) {
         console.error('Scraping error:', error);
         window.parent.postMessage({
           type: 'SCRAPING_ERROR',
-          error: error.message
+          error: (error && error.message) || String(error)
         }, parentOrigin);
       }
     }

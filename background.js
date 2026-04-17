@@ -23,7 +23,7 @@ let isExtracting = false;
 let _extractionTimer = null;
 
 function startExtractionTimeout() {
-  _extractionTimer = setTimeout(() => failExtraction('Extraction timed out', 'no response within 180s'), EXTRACTION_TIMEOUT_MS);
+  _extractionTimer = setTimeout(() => failExtraction('Extraction timed out', `no response within ${EXTRACTION_TIMEOUT_MS / 1000}s`), EXTRACTION_TIMEOUT_MS);
 }
 
 function clearExtractionTimeout() {
@@ -113,7 +113,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     const now = new Date();
     const rawDate = message.dateFormatted;
-    const dateStr = (rawDate && /^\d{8}$/.test(rawDate)) ? rawDate : `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+    const dateStr = (typeof rawDate === 'string' && /^\d{8}$/.test(rawDate)) ? rawDate : `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
     const filename = `transcript_${dateStr}.md`;
 
     const dataUrl = 'data:text/markdown;charset=utf-8,' + encodeURIComponent(transcript);
