@@ -37,7 +37,7 @@ Badge states reflect extraction progress:
 | Extracting | `...` | `#0078d4` (Teams blue) |
 | Error      | `!`   | `#d42020` (red)    |
 
-An `extractingTabId` variable (in-memory) tracks which tab is currently extracting and prevents concurrent extractions. A 180-second timeout guard calls `failExtraction` if no response arrives. Listeners on `chrome.tabs.onRemoved` and `chrome.tabs.onUpdated` reset extraction state when the extracting tab is closed or navigates away from Teams.
+An `extractingTabId` variable (in-memory) tracks which tab is currently extracting and prevents concurrent extractions. A 360-second timeout guard calls `failExtraction` if no response arrives. Listeners on `chrome.tabs.onRemoved` and `chrome.tabs.onUpdated` reset extraction state when the extracting tab is closed or navigates away from Teams.
 
 ### content.js
 

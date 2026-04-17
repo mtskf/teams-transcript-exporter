@@ -18,7 +18,7 @@ function showError() {
   showBadge('!', ERROR_COLOR, BADGE_DURATION_MS);
 }
 
-const EXTRACTION_TIMEOUT_MS = 180000;
+const EXTRACTION_TIMEOUT_MS = 360000;
 let extractingTabId = null;
 let _extractionTimer = null;
 
