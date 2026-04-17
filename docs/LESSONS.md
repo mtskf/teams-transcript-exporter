@@ -50,19 +50,24 @@ Both branches produce `{ speaker, timestamp, text }`.
 
 ---
 
-## postMessage targetOrigin: always specify the exact origin
+## postMessage targetOrigin: '*' fallback is required for Teams iframes
 
-Passing `'*'` as `targetOrigin` means any page that happens to be embedded in the same window can read the message. This matters here because `postMessage` carries transcript content.
-
-The extension now resolves the iframe's origin at call time:
+Teams sets `xplatIframe.src` dynamically. At the time `postMessage` is called, `iframe.src` is often an empty string, making `new URL(iframe.src)` throw. The `'*'` fallback is not a security shortcut — it is necessary for the extension to function.
 
 ```js
-let targetOrigin;
-try { targetOrigin = new URL(iframe.src).origin; } catch { targetOrigin = '*'; }
-iframe.contentWindow.postMessage({ type: 'START_SCRAPING_IFRAME' }, targetOrigin);
+let targetOrigin = '*';
+if (iframe.src) {
+  try { targetOrigin = new URL(iframe.src).origin; }
+  catch { console.warn('[content] Could not parse iframe.src, using wildcard:', iframe.src); }
+}
 ```
 
-The fallback to `'*'` is deliberate — a missing or unparseable `src` should not silently break the flow — but it is worth eliminating. Track `TODO.md` item about tightening this.
+This is safe because:
+1. The message payload is a non-sensitive trigger command (`START_SCRAPING_IFRAME`)
+2. The receiving side validates `event.origin` against a Teams domain allowlist
+3. The parent side validates `event.source === iframe.contentWindow`
+
+**Lesson learned:** A review cycle once removed this fallback as a "security fix", breaking the extension entirely. Theoretical security improvements must be validated against actual runtime behavior. If the target application (Teams) sets iframe attributes dynamically, static analysis alone will produce false positives.
 
 On the receive side, the iframe's listener validates `event.origin` against a hardcoded allowlist of Teams domains and drops anything else.
 
