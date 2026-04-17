@@ -19,7 +19,7 @@ function showError() {
 }
 
 const EXTRACTION_TIMEOUT_MS = 180000;
-let isExtracting = false;
+let extractingTabId = null;
 let _extractionTimer = null;
 
 function startExtractionTimeout() {
@@ -36,7 +36,7 @@ function clearExtractionTimeout() {
 function failExtraction(reason, detail) {
   clearExtractionTimeout();
   console.error(`[background] ${reason}:`, detail);
-  isExtracting = false;
+  extractingTabId = null;
   showError();
 }
 
@@ -55,7 +55,7 @@ function isTeamsUrl(url) {
 }
 
 chrome.action.onClicked.addListener(async (tab) => {
-  if (isExtracting) return;
+  if (extractingTabId !== null) return;
 
   if (!isTeamsUrl(tab.url)) {
     console.error('[background] Not a Teams page:', tab.url);
@@ -63,7 +63,7 @@ chrome.action.onClicked.addListener(async (tab) => {
     return;
   }
 
-  isExtracting = true;
+  extractingTabId = tab.id;
   startExtractionTimeout();
   chrome.action.setBadgeText({ text: '...' }).catch(err => console.warn('[background] badge:', err.message));
   chrome.action.setBadgeBackgroundColor({ color: PROGRESS_COLOR }).catch(err => console.warn('[background] badge:', err.message));
@@ -97,7 +97,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message || typeof message !== 'object') return;
   if (message.action === 'TRANSCRIPT_READY') {
     clearExtractionTimeout();
-    isExtracting = false;
+    extractingTabId = null;
 
     const transcript = message.transcript;
     if (!transcript) {
@@ -131,5 +131,26 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   } else {
     console.warn('[background] Unhandled message action:', message.action);
     sendResponse({ received: false, error: 'Unknown action' });
+  }
+});
+
+// Reset extraction state when the extracting tab is closed or navigates away
+function resetExtraction() {
+  clearExtractionTimeout();
+  extractingTabId = null;
+  chrome.action.setBadgeText({ text: '' }).catch(() => {});
+}
+
+chrome.tabs.onRemoved.addListener((tabId) => {
+  if (tabId === extractingTabId) {
+    console.log('[background] Extracting tab closed, resetting state');
+    resetExtraction();
+  }
+});
+
+chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+  if (tabId === extractingTabId && changeInfo.url && !isTeamsUrl(changeInfo.url)) {
+    console.log('[background] Extracting tab navigated away from Teams, resetting state');
+    resetExtraction();
   }
 });

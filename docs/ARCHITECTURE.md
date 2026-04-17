@@ -37,7 +37,7 @@ Badge states reflect extraction progress:
 | Extracting | `...` | `#0078d4` (Teams blue) |
 | Error      | `!`   | `#d42020` (red)    |
 
-An `isExtracting` flag (in-memory) prevents concurrent extractions. A 180-second timeout guard calls `failExtraction` if no response arrives.
+An `extractingTabId` variable (in-memory) tracks which tab is currently extracting and prevents concurrent extractions. A 180-second timeout guard calls `failExtraction` if no response arrives. Listeners on `chrome.tabs.onRemoved` and `chrome.tabs.onUpdated` reset extraction state when the extracting tab is closed or navigates away from Teams.
 
 ### content.js
 
@@ -123,4 +123,4 @@ Messages from any other origin are silently dropped.
 
 ### No persistent background state
 
-The service worker has no access to transcript content — it only stores a short `isExtracting` boolean and a timer handle. All DOM access and data assembly happens inside `content.js`, which runs in the renderer process and never sends data to an external server.
+The service worker has no access to transcript content — it only stores `extractingTabId` (the tab ID currently being extracted, or `null`) and a timer handle. All DOM access and data assembly happens inside `content.js`, which runs in the renderer process and never sends data to an external server.

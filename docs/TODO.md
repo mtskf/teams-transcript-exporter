@@ -26,13 +26,20 @@
 - [ ] スクロールループに絶対イテレーション上限を追加 (content.js:214)
   - DOM がライブ更新で微動し続ける場合に無限ループのリスク
   - 上限到達時は収集済みデータで処理を続行すべき
-- [ ] `isExtracting` を `chrome.storage.session` で永続化 (background.js)
+- [ ] `extractingTabId` を `chrome.storage.session` で永続化 (background.js)
   - MV3 Service Worker のスリープで in-memory 変数が失われるリスク
   - `storage` パーミッション追加が必要
 - [ ] 重複排除キーを複合化: speaker + timestamp + text (content.js:165-167)
   - 現在の innerText 全体比較は機能的に問題ないが可読性が低い
 - [ ] DOM パーサーの高スキップ率検出 — スキップ数が全セル数の一定割合を超えたら警告 (content.js)
 - [ ] スクロール停止判定の改善 — 仮想スクロールの丸め誤差対策 (content.js:191-200)
+- [ ] `TRANSCRIPT_READY` / `SCRAPING_ERROR` ハンドラで `sender.tab.id === extractingTabId` を検証 (background.js)
+  - 現在はどのタブからのメッセージでも受け付ける（同拡張コンテンツスクリプトに限定されるためリスクは低い）
+  - defense-in-depth として sender を検証すべき
+- [ ] `onUpdated` リスナーでタブリロード時のリセットを追加 (background.js:151)
+  - 現在は `changeInfo.url` のみ監視するためリロードを検出しない
+  - リロードで content script コンテキストが破棄されるが `extractingTabId` がセットされたまま残る
+  - 既存の 180s タイムアウトがカバーするためリスクは低い
 - [ ] manifest.json の content_scripts ブロックと programmatic injection (background.js) の二重注入を解消
   - content_scripts を削除し programmatic injection のみにするか、逆に programmatic injection を削除するか要検討
   - 動作変更を伴うため十分なテストが必要
