@@ -36,6 +36,10 @@
 - [ ] `TRANSCRIPT_READY` / `SCRAPING_ERROR` ハンドラで `sender.tab.id === extractingTabId` を検証 (background.js)
   - 現在はどのタブからのメッセージでも受け付ける（同拡張コンテンツスクリプトに限定されるためリスクは低い）
   - defense-in-depth として sender を検証すべき
+- [ ] `onUpdated` リスナーでタブリロード時のリセットを追加 (background.js:151)
+  - 現在は `changeInfo.url` のみ監視するためリロードを検出しない
+  - リロードで content script コンテキストが破棄されるが `extractingTabId` がセットされたまま残る
+  - 既存の 180s タイムアウトがカバーするためリスクは低い
 - [ ] manifest.json の content_scripts ブロックと programmatic injection (background.js) の二重注入を解消
   - content_scripts を削除し programmatic injection のみにするか、逆に programmatic injection を削除するか要検討
   - 動作変更を伴うため十分なテストが必要
