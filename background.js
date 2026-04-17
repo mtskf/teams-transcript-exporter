@@ -94,6 +94,7 @@ chrome.action.onClicked.addListener(async (tab) => {
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (!message || typeof message !== 'object') return;
   if (message.action === 'TRANSCRIPT_READY') {
     clearExtractionTimeout();
     isExtracting = false;
@@ -111,7 +112,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
 
     const now = new Date();
-    const dateStr = message.dateFormatted || `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+    const rawDate = message.dateFormatted;
+    const dateStr = (rawDate && /^\d{8}$/.test(rawDate)) ? rawDate : `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
     const filename = `transcript_${dateStr}.md`;
 
     const dataUrl = 'data:text/markdown;charset=utf-8,' + encodeURIComponent(transcript);

@@ -12,6 +12,15 @@
 
 ## Medium Priority
 
+- [ ] transcriptData 要素のフィールドレベル型ガード追加 (content.js:127)
+  - Array.isArray チェックはあるが個別フィールド (speaker, timestamp, text) の typeof 検証がない
+  - 非文字列値がサイレントに markdown に混入する可能性
+- [ ] manifest.json と background.js のサブドメインパターン不一致の解消
+  - background.js は `*.teams.microsoft.com` を許可するが manifest は bare domain のみ
+  - 実際に Teams がサブドメインを使用するか要調査
+- [ ] スクロールループに絶対イテレーション上限を追加 (content.js:203)
+  - DOM がライブ更新で微動し続ける場合に無限ループのリスク
+  - 上限到達時は収集済みデータで処理を続行すべき
 - [ ] `isExtracting` を `chrome.storage.session` で永続化 (background.js)
   - MV3 Service Worker のスリープで in-memory 変数が失われるリスク
   - `storage` パーミッション追加が必要

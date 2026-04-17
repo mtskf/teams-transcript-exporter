@@ -88,7 +88,6 @@ if (window.self === window.top) {
       } else {
         sendResponse({ success: false, error: 'Iframe not found.' });
       }
-
       return true;
     }
   });
@@ -245,8 +244,8 @@ if (window.self !== window.top) {
                 if (speaker && content) {
                   transcriptData.push({ speaker, timestamp, text: content });
                 }
-              } else if (lines.length === 1) {
-                // Single-line cell (speaker header, no text) — skip silently
+              } else if (lines.length <= 1) {
+                // Single-line or empty cell (speaker header, whitespace-only) — skip silently
               } else {
                 console.warn('[iframe] Unexpected cell format, lines:', lines.length, cell.innerText?.slice(0, 80));
                 skippedCount++;
