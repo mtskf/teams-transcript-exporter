@@ -75,13 +75,10 @@ if (window.self === window.top) {
       // iframe にメッセージを送信
       const iframe = document.getElementById('xplatIframe');
       if (iframe && iframe.contentWindow) {
-        let targetOrigin;
-        try {
-          targetOrigin = new URL(iframe.src).origin;
-        } catch (err) {
-          console.error('[content] Failed to parse iframe origin, aborting:', iframe.src, err);
-          sendResponse({ success: false, error: 'Could not determine iframe origin' });
-          return true;
+        let targetOrigin = '*';
+        if (iframe.src) {
+          try { targetOrigin = new URL(iframe.src).origin; }
+          catch { console.warn('[content] Could not parse iframe.src, using wildcard:', iframe.src); }
         }
         iframe.contentWindow.postMessage({ type: 'START_SCRAPING_IFRAME' }, targetOrigin);
         sendResponse({ success: true });
