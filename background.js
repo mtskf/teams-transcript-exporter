@@ -6,10 +6,10 @@ let _badgeTimer = null;
 
 function showBadge(text, color, duration) {
   if (_badgeTimer) clearTimeout(_badgeTimer);
-  chrome.action.setBadgeText({ text }).catch(() => {});
-  chrome.action.setBadgeBackgroundColor({ color }).catch(() => {});
+  chrome.action.setBadgeText({ text }).catch(err => console.warn('[background] badge:', err.message));
+  chrome.action.setBadgeBackgroundColor({ color }).catch(err => console.warn('[background] badge:', err.message));
   _badgeTimer = setTimeout(() => {
-    chrome.action.setBadgeText({ text: '' }).catch(() => {});
+    chrome.action.setBadgeText({ text: '' }).catch(err => console.warn('[background] badge:', err.message));
     _badgeTimer = null;
   }, duration);
 }
@@ -65,16 +65,24 @@ chrome.action.onClicked.addListener(async (tab) => {
 
   isExtracting = true;
   startExtractionTimeout();
-  chrome.action.setBadgeText({ text: '...' }).catch(() => {});
-  chrome.action.setBadgeBackgroundColor({ color: PROGRESS_COLOR }).catch(() => {});
+  chrome.action.setBadgeText({ text: '...' }).catch(err => console.warn('[background] badge:', err.message));
+  chrome.action.setBadgeBackgroundColor({ color: PROGRESS_COLOR }).catch(err => console.warn('[background] badge:', err.message));
 
   try {
     await chrome.scripting.executeScript({
       target: { tabId: tab.id, allFrames: true },
       files: ['content.js']
     });
-    await new Promise(resolve => setTimeout(resolve, 100));
-    const response = await chrome.tabs.sendMessage(tab.id, { action: 'START_SCRAPING' });
+    let response;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      try {
+        response = await chrome.tabs.sendMessage(tab.id, { action: 'START_SCRAPING' });
+        break;
+      } catch (err) {
+        if (attempt === 4) throw err;
+        await new Promise(r => setTimeout(r, 200));
+      }
+    }
     if (response == null) {
       failExtraction('Content script did not respond', 'response was null/undefined — listener may not be registered');
     } else if (!response.success) {
@@ -112,11 +120,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         failExtraction('Download failed', chrome.runtime.lastError.message);
         return;
       }
-      chrome.action.setBadgeText({ text: '' }).catch(() => {});
+      chrome.action.setBadgeText({ text: '' }).catch(err => console.warn('[background] badge:', err.message));
     });
     sendResponse({ received: true });
   } else if (message.action === 'SCRAPING_ERROR') {
     failExtraction('Scraping error from content script', message.error);
     sendResponse({ received: true });
+  } else {
+    console.warn('[background] Unhandled message action:', message.action);
+    sendResponse({ received: false, error: 'Unknown action' });
   }
 });

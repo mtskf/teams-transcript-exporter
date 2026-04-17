@@ -23,8 +23,7 @@
     {
       "matches": [
         "https://teams.microsoft.com/*",
-        "https://teams.cloud.microsoft/*",
-        "https://*.sharepoint.com/*"
+        "https://teams.cloud.microsoft/*"
       ],
       "js": ["content.js"],
       "all_frames": true,

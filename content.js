@@ -5,13 +5,17 @@ window._teamsTranscriptLoaded = true;
 console.log('🔵 Content script loaded!', window.location.href);
 console.log('Is iframe?', window.self !== window.top);
 
-const MONTH_NAME_TO_NUMBER = {
-  'January': '01', 'February': '02', 'March': '03', 'April': '04',
-  'May': '05', 'June': '06', 'July': '07', 'August': '08',
-  'September': '09', 'October': '10', 'November': '11', 'December': '12'
-};
+function buildMonthMap() {
+  const map = {};
+  for (let m = 0; m < 12; m++) {
+    const name = new Date(2000, m, 1).toLocaleString(undefined, { month: 'long' });
+    map[name] = String(m + 1).padStart(2, '0');
+  }
+  return map;
+}
+const MONTH_NAME_TO_NUMBER = buildMonthMap();
 
-// ========== 親ページ（teams.microsoft.com）用 ==========
+// ========== 親ページ（teams.microsoft.com / teams.cloud.microsoft）用 ==========
 if (window.self === window.top) {
 
   function sendWithRetry(msg, retries = 2) {
@@ -72,7 +76,13 @@ if (window.self === window.top) {
       const iframe = document.getElementById('xplatIframe');
       if (iframe && iframe.contentWindow) {
         let targetOrigin;
-        try { targetOrigin = new URL(iframe.src).origin; } catch { targetOrigin = '*'; }
+        try {
+          targetOrigin = new URL(iframe.src).origin;
+        } catch (err) {
+          console.error('[content] Failed to parse iframe origin, aborting:', iframe.src, err);
+          sendResponse({ success: false, error: 'Could not determine iframe origin' });
+          return true;
+        }
         iframe.contentWindow.postMessage({ type: 'START_SCRAPING_IFRAME' }, targetOrigin);
         sendResponse({ success: true });
       } else {
@@ -111,7 +121,7 @@ if (window.self === window.top) {
       const transcriptData = event.data.transcriptData;
       if (!Array.isArray(transcriptData)) {
         console.error('[content] transcriptData is not an array:', typeof transcriptData);
-        sendWithRetry({ action: 'SCRAPING_ERROR', error: 'Invalid transcript data received from iframe' }).catch(() => {});
+        sendWithRetry({ action: 'SCRAPING_ERROR', error: 'Invalid transcript data received from iframe' }).catch(err => { console.error('[content] Could not report invalid transcript data to background:', err); });
         return;
       }
       transcriptData.forEach(item => {
@@ -131,6 +141,10 @@ if (window.self === window.top) {
         dateFormatted: meetingInfo.dateFormatted
       }).catch(err => {
         console.error('[content] Failed to deliver TRANSCRIPT_READY after retries:', err);
+        chrome.runtime.sendMessage({
+          action: 'SCRAPING_ERROR',
+          error: 'Transcript collected but failed to send to background: ' + err.message
+        }).catch(() => {});
       });
     } else if (event.data.type === 'SCRAPING_ERROR') {
       console.error('Scraping error:', event.data.error);
@@ -139,6 +153,10 @@ if (window.self === window.top) {
         error: event.data.error
       }).catch(err => {
         console.error('[content] Failed to deliver SCRAPING_ERROR after retries:', err);
+        chrome.runtime.sendMessage({
+          action: 'SCRAPING_ERROR',
+          error: 'Original: ' + event.data.error + '. Relay failed: ' + err.message
+        }).catch(() => {});
       });
     }
   });

@@ -2,9 +2,13 @@
 
 ## High Priority
 
-- [ ] postMessage の targetOrigin を `'*'` から実際のオリジンに変更 (content.js:60,205,208,216)
-  - 親→iframe: `new URL(iframe.src).origin` （例外ガード付き）
-  - iframe→親: cross-origin のため困難。受信側の event.source 検証で緩和中
+- [ ] parent-side message listener に event.origin 検証を追加 (content.js:87)
+  - 現在は event.source === iframe.contentWindow のみ
+  - *.sharepoint.com を content_scripts から削除したため攻撃面は縮小
+  - 完全対策には iframe origin リスト（sharepoint サブドメイン等）の調査が必要
+- [x] ~~postMessage の targetOrigin を `'*'` から実際のオリジンに変更~~ (resolved)
+  - 親→iframe: `new URL(iframe.src).origin`（パース失敗時は abort）
+  - iframe→親: `parentOrigin`（受信時の event.origin をキャプチャ）
 
 ## Medium Priority
 
