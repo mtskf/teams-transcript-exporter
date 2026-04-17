@@ -217,7 +217,10 @@ if (window.self !== window.top) {
         let skippedCount = 0;
 
         // スクロールしながら収集
-        while (noChangeCount < 5) {
+        const MAX_ITERATIONS = 1000;
+        let iterations = 0;
+        while (noChangeCount < 5 && iterations < MAX_ITERATIONS) {
+          iterations++;
           // 少し待ってレンダリングを待つ
           await new Promise(r => setTimeout(r, 500));
 
@@ -286,6 +289,9 @@ if (window.self !== window.top) {
           lastScrollTop = scrollContainer.scrollTop;
         }
 
+        if (iterations >= MAX_ITERATIONS) {
+          console.warn('🟡 Scroll loop hit iteration limit (' + MAX_ITERATIONS + '), proceeding with collected data');
+        }
         console.log('🟢 Scraping complete:', transcriptData.length, 'items,', skippedCount, 'skipped');
 
         // 親ウィンドウに結果を送信
