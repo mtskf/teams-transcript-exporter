@@ -2,26 +2,28 @@
 
 ## High Priority
 
-- [ ] parent-side message listener に event.origin 検証を追加 (content.js:87)
-  - 現在は event.source === iframe.contentWindow のみ
-  - *.sharepoint.com を content_scripts から削除したため攻撃面は縮小
-  - 完全対策には iframe origin リスト（sharepoint サブドメイン等）の調査が必要
+- [x] ~~parent-side message listener に event.origin 検証を追加~~ (content.js:98) (resolved)
+  - `iframe.src` 取得可能時に `event.origin` と突合（Teams が動的に設定するため空の場合あり）
+  - `event.source === iframe.contentWindow` チェックとの二重防御（src 不在時は source のみ）
 - [x] ~~postMessage の targetOrigin を `'*'` から実際のオリジンに変更~~ (resolved)
-  - 親→iframe: `new URL(iframe.src).origin`（パース失敗時は abort）
+  - 親→iframe: `new URL(iframe.src).origin`（取得できない場合は `'*'` にフォールバック）
   - iframe→親: `parentOrigin`（受信時の event.origin をキャプチャ）
 
 ## Medium Priority
 
+- [ ] `window._meetingInfo` 未設定時のフォールバック改善 (content.js:116)
+  - 現在は warn ログのみで `'Teams Meeting (metadata unavailable)'` にフォールバック
+  - ユーザーにアクション可能なフィードバック（badge 通知等）を提供すべき
 - [ ] `isExtracting` をタブ単位にスコープし、タブ閉じ/ナビゲーション時にリセット (background.js)
   - 現在はグローバルフラグで、タブを閉じると 180 秒間ロックされる
   - `chrome.tabs.onRemoved` / `chrome.tabs.onUpdated` でクリーンアップが必要
-- [x] ~~transcriptData 要素のフィールドレベル型ガード追加~~ (content.js:127) (resolved)
+- [x] ~~transcriptData 要素のフィールドレベル型ガード追加~~ (content.js:134) (resolved)
   - Array.isArray チェックはあるが個別フィールド (speaker, timestamp, text) の typeof 検証がない
   - 非文字列値がサイレントに markdown に混入する可能性
 - [ ] manifest.json と background.js のサブドメインパターン不一致の解消
   - background.js は `*.teams.microsoft.com` を許可するが manifest は bare domain のみ
   - 実際に Teams がサブドメインを使用するか要調査
-- [ ] スクロールループに絶対イテレーション上限を追加 (content.js:203)
+- [ ] スクロールループに絶対イテレーション上限を追加 (content.js:214)
   - DOM がライブ更新で微動し続ける場合に無限ループのリスク
   - 上限到達時は収集済みデータで処理を続行すべき
 - [ ] `isExtracting` を `chrome.storage.session` で永続化 (background.js)

@@ -75,6 +75,9 @@ if (window.self === window.top) {
       // iframe にメッセージを送信
       const iframe = document.getElementById('xplatIframe');
       if (iframe && iframe.contentWindow) {
+        // Teams sets iframe.src dynamically; it may be empty at call time.
+        // Fall back to '*' when unavailable — safe because the receiving iframe
+        // validates event.origin against the Teams domain allowlist.
         let targetOrigin = '*';
         if (iframe.src) {
           try { targetOrigin = new URL(iframe.src).origin; }
@@ -94,6 +97,22 @@ if (window.self === window.top) {
     if (!event.data || !event.data.type) return;
     const iframe = document.getElementById('xplatIframe');
     if (!iframe || event.source !== iframe.contentWindow) return;
+
+    // Validate event.origin against the iframe's known origin (when available)
+    // Teams sets iframe.src dynamically; it may be empty at receive time — fall through to event.source check
+    if (iframe.src) {
+      try {
+        const expectedOrigin = new URL(iframe.src).origin;
+        if (event.origin !== expectedOrigin) {
+          console.warn('[content] Rejected message: origin', event.origin, 'does not match iframe origin', expectedOrigin);
+          return;
+        }
+      } catch {
+        // iframe.src exists but is unparseable — unusual Teams behavior.
+        // Fall through: event.source check above is the primary guard.
+        console.warn('[content] Could not parse iframe.src for origin validation:', iframe.src);
+      }
+    }
 
     if (event.data.type === 'TRANSCRIPT_COLLECTED') {
       console.log('✅ Transcript received:', event.data.itemCount, 'items');
@@ -145,14 +164,15 @@ if (window.self === window.top) {
       });
     } else if (event.data.type === 'SCRAPING_ERROR') {
       console.error('Scraping error:', event.data.error);
+      const errorMsg = String(event.data.error ?? 'Unknown error from iframe');
       sendWithRetry({
         action: 'SCRAPING_ERROR',
-        error: event.data.error
+        error: errorMsg
       }).catch(err => {
         console.error('[content] Failed to deliver SCRAPING_ERROR after retries:', err);
         chrome.runtime.sendMessage({
           action: 'SCRAPING_ERROR',
-          error: 'Original: ' + event.data.error + '. Relay failed: ' + err.message
+          error: 'Original: ' + errorMsg + '. Relay failed: ' + err.message
         }).catch(err2 => console.warn('[content] Last-resort SCRAPING_ERROR also failed:', err2.message));
       });
     }
