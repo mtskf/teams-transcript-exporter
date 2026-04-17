@@ -105,6 +105,8 @@ if (window.self === window.top) {
           return;
         }
       } catch {
+        // iframe.src exists but is unparseable — unusual Teams behavior.
+        // Fall through: event.source check above is the primary guard.
         console.warn('[content] Could not parse iframe.src for origin validation:', iframe.src);
       }
     }
@@ -159,14 +161,15 @@ if (window.self === window.top) {
       });
     } else if (event.data.type === 'SCRAPING_ERROR') {
       console.error('Scraping error:', event.data.error);
+      const errorMsg = String(event.data.error ?? 'Unknown error from iframe');
       sendWithRetry({
         action: 'SCRAPING_ERROR',
-        error: event.data.error
+        error: errorMsg
       }).catch(err => {
         console.error('[content] Failed to deliver SCRAPING_ERROR after retries:', err);
         chrome.runtime.sendMessage({
           action: 'SCRAPING_ERROR',
-          error: 'Original: ' + event.data.error + '. Relay failed: ' + err.message
+          error: 'Original: ' + errorMsg + '. Relay failed: ' + err.message
         }).catch(err2 => console.warn('[content] Last-resort SCRAPING_ERROR also failed:', err2.message));
       });
     }
