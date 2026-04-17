@@ -217,6 +217,9 @@ if (window.self !== window.top) {
         let skippedCount = 0;
 
         // スクロールしながら収集
+        // Upper bound: prevents infinite loops in degenerate cases.
+        // In practice, the 360s extraction timeout in background.js will fire
+        // first for large transcripts (~450 iterations at 800ms/iter).
         const MAX_ITERATIONS = 1000;
         let iterations = 0;
         while (noChangeCount < 5 && iterations < MAX_ITERATIONS) {
