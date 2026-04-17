@@ -1,1 +1,4 @@
+# Claude Code
 .review-cycle/
+.claude/plans/
+.claude/settings.local.json
