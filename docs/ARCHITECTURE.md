@@ -88,6 +88,7 @@ content.js (iframe): window.addEventListener('message')
        |
 content.js (top-level): window.addEventListener('message')
        | validates event.source === iframe.contentWindow
+       | validates event.origin against iframe.src origin
        | builds Markdown string
        |
        v  chrome.runtime.sendMessage(TRANSCRIPT_READY)
@@ -103,8 +104,8 @@ Error path: any failure sends `SCRAPING_ERROR` up the same chain, ultimately sho
 
 ### Origin validation for postMessage
 
-- Parent → iframe: `targetOrigin` is set to `new URL(iframe.src).origin`. If `iframe.src` is unparseable, the operation aborts rather than falling back to `'*'`.
-- Iframe → parent: `window.parent.postMessage` uses `parentOrigin` captured from `event.origin` at the time the iframe received the trigger message. The parent additionally verifies `event.source === iframe.contentWindow` before acting on any incoming message.
+- Parent → iframe: `targetOrigin` is set to `new URL(iframe.src).origin` when available. If `iframe.src` is empty or unparseable at call time (Teams sets it dynamically), falls back to `'*'`. This is safe because the message is a non-sensitive trigger command and the receiving iframe validates `event.origin` against a Teams domain allowlist.
+- Iframe → parent: `window.parent.postMessage` uses `parentOrigin` captured from `event.origin` at the time the iframe received the trigger message. The parent validates `event.source === iframe.contentWindow` for all messages, and additionally checks `event.origin` against the origin derived from `iframe.src` when available.
 
 ### Iframe message origin allowlist
 

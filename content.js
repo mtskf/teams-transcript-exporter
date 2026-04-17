@@ -95,6 +95,20 @@ if (window.self === window.top) {
     const iframe = document.getElementById('xplatIframe');
     if (!iframe || event.source !== iframe.contentWindow) return;
 
+    // Validate event.origin against the iframe's known origin (when available)
+    // Teams sets iframe.src dynamically; it may be empty at receive time — fall through to event.source check
+    if (iframe.src) {
+      try {
+        const expectedOrigin = new URL(iframe.src).origin;
+        if (event.origin !== expectedOrigin) {
+          console.warn('[content] Rejected message: origin', event.origin, 'does not match iframe origin', expectedOrigin);
+          return;
+        }
+      } catch {
+        console.warn('[content] Could not parse iframe.src for origin validation:', iframe.src);
+      }
+    }
+
     if (event.data.type === 'TRANSCRIPT_COLLECTED') {
       console.log('✅ Transcript received:', event.data.itemCount, 'items');
       if (!window._meetingInfo) {
