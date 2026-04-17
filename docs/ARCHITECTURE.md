@@ -105,7 +105,7 @@ Error path: any failure sends `SCRAPING_ERROR` up the same chain, ultimately sho
 ### Origin validation for postMessage
 
 - Parent → iframe: `targetOrigin` is set to `new URL(iframe.src).origin` when available. If `iframe.src` is empty or unparseable at call time (Teams sets it dynamically), falls back to `'*'`. This is safe because the message is a non-sensitive trigger command and the receiving iframe validates `event.origin` against a Teams domain allowlist.
-- Iframe → parent: `window.parent.postMessage` uses `parentOrigin` captured from `event.origin` at the time the iframe received the trigger message. The parent validates `event.source === iframe.contentWindow` for all messages, and additionally checks `event.origin` against the origin derived from `iframe.src` when available.
+- Iframe → parent: `window.parent.postMessage` uses `parentOrigin` captured from `event.origin` at the time the iframe received the trigger message. The parent validates `event.source === iframe.contentWindow` for all messages. When `iframe.src` is present and parseable, it also checks `event.origin` against the derived origin; if `iframe.src` is absent or unparseable, the `event.source` check alone is the guard.
 
 ### Iframe message origin allowlist
 

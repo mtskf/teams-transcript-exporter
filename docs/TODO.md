@@ -11,13 +11,13 @@
 
 ## Medium Priority
 
-- [ ] `window._meetingInfo` 未設定時のフォールバック改善 (content.js:114)
+- [ ] `window._meetingInfo` 未設定時のフォールバック改善 (content.js:116)
   - 現在は warn ログのみで `'Teams Meeting (metadata unavailable)'` にフォールバック
   - ユーザーにアクション可能なフィードバック（badge 通知等）を提供すべき
 - [ ] `isExtracting` をタブ単位にスコープし、タブ閉じ/ナビゲーション時にリセット (background.js)
   - 現在はグローバルフラグで、タブを閉じると 180 秒間ロックされる
   - `chrome.tabs.onRemoved` / `chrome.tabs.onUpdated` でクリーンアップが必要
-- [x] ~~transcriptData 要素のフィールドレベル型ガード追加~~ (content.js:132) (resolved)
+- [x] ~~transcriptData 要素のフィールドレベル型ガード追加~~ (content.js:134) (resolved)
   - Array.isArray チェックはあるが個別フィールド (speaker, timestamp, text) の typeof 検証がない
   - 非文字列値がサイレントに markdown に混入する可能性
 - [ ] manifest.json と background.js のサブドメインパターン不一致の解消

@@ -75,6 +75,9 @@ if (window.self === window.top) {
       // iframe にメッセージを送信
       const iframe = document.getElementById('xplatIframe');
       if (iframe && iframe.contentWindow) {
+        // Teams sets iframe.src dynamically; it may be empty at call time.
+        // Fall back to '*' when unavailable — safe because the receiving iframe
+        // validates event.origin against the Teams domain allowlist.
         let targetOrigin = '*';
         if (iframe.src) {
           try { targetOrigin = new URL(iframe.src).origin; }
