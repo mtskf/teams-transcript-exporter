@@ -1,13 +1,35 @@
+if (window._teamsTranscriptLoaded) { /* already initialized */ }
+else {
+window._teamsTranscriptLoaded = true;
+
 console.log('🔵 Content script loaded!', window.location.href);
 console.log('Is iframe?', window.self !== window.top);
 
+function buildMonthMap() {
+  const map = {};
+  for (let m = 0; m < 12; m++) {
+    const name = new Date(2000, m, 1).toLocaleString('en-US', { month: 'long' });
+    map[name] = String(m + 1).padStart(2, '0');
+  }
+  return map;
+}
+const MONTH_NAME_TO_NUMBER = buildMonthMap();
 
-// ========== 親ページ（teams.microsoft.com）用 ==========
+// ========== 親ページ（teams.microsoft.com / teams.cloud.microsoft）用 ==========
 if (window.self === window.top) {
 
-  const NEWLINE = String.fromCharCode(10);
+  function sendWithRetry(msg, retries = 2) {
+    return chrome.runtime.sendMessage(msg).catch(err => {
+      if (retries > 0) {
+        console.warn(`[content] sendMessage failed, retrying (${retries} left):`, err.message);
+        return new Promise(r => setTimeout(r, 500)).then(() => sendWithRetry(msg, retries - 1));
+      }
+      console.error('[content] sendMessage failed after retries:', err);
+      throw err;
+    });
+  }
 
-  // popup からのメッセージを受信
+  // background service worker からのメッセージを受信
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.action === 'START_SCRAPING') {
       console.log('Starting scraping process...');
@@ -32,13 +54,12 @@ if (window.self === window.top) {
           const monthName = dateMatch[1];
           const day = dateMatch[2].padStart(2, '0');
           const year = dateMatch[3];
-          const months = {
-            'January': '01', 'February': '02', 'March': '03', 'April': '04',
-            'May': '05', 'June': '06', 'July': '07', 'August': '08',
-            'September': '09', 'October': '10', 'November': '11', 'December': '12'
-          };
-          const month = months[monthName] || '01';
-          meetingDateFormatted = `${year}${month}${day}`;
+          const month = MONTH_NAME_TO_NUMBER[monthName];
+          if (!month) {
+            console.warn('[content] Unrecognized month name:', monthName, '— defaulting to raw date text');
+          } else {
+            meetingDateFormatted = `${year}${month}${day}`;
+          }
         }
       }
 
@@ -54,12 +75,16 @@ if (window.self === window.top) {
       // iframe にメッセージを送信
       const iframe = document.getElementById('xplatIframe');
       if (iframe && iframe.contentWindow) {
-        iframe.contentWindow.postMessage({ type: 'START_SCRAPING_IFRAME' }, '*');
+        let targetOrigin = '*';
+        if (iframe.src) {
+          try { targetOrigin = new URL(iframe.src).origin; }
+          catch { console.warn('[content] Could not parse iframe.src, using wildcard:', iframe.src); }
+        }
+        iframe.contentWindow.postMessage({ type: 'START_SCRAPING_IFRAME' }, targetOrigin);
         sendResponse({ success: true });
       } else {
         sendResponse({ success: false, error: 'Iframe not found.' });
       }
-
       return true;
     }
   });
@@ -67,12 +92,15 @@ if (window.self === window.top) {
   // iframe からのメッセージを受信
   window.addEventListener('message', (event) => {
     if (!event.data || !event.data.type) return;
+    const iframe = document.getElementById('xplatIframe');
+    if (!iframe || event.source !== iframe.contentWindow) return;
 
     if (event.data.type === 'TRANSCRIPT_COLLECTED') {
       console.log('✅ Transcript received:', event.data.itemCount, 'items');
-
-      const NEWLINE = String.fromCharCode(10);
-      const meetingInfo = window._meetingInfo || { title: 'Teams Meeting', date: '', dateFormatted: '' };
+      if (!window._meetingInfo) {
+        console.warn('[content] window._meetingInfo not set, using defaults. Race condition possible.');
+      }
+      const meetingInfo = window._meetingInfo || { title: 'Teams Meeting (metadata unavailable)', date: '', dateFormatted: '' };
       const lines = [];
 
       lines.push(`# ${meetingInfo.title}`);
@@ -86,47 +114,70 @@ if (window.self === window.top) {
       lines.push('## Transcript');
       lines.push('');
 
-      event.data.transcriptData.forEach(item => {
-        lines.push(`### ${item.speaker} — ${item.timestamp}`);
+      const transcriptData = event.data.transcriptData;
+      if (!Array.isArray(transcriptData)) {
+        console.error('[content] transcriptData is not an array:', typeof transcriptData);
+        sendWithRetry({ action: 'SCRAPING_ERROR', error: 'Invalid transcript data received from iframe' }).catch(err => { console.error('[content] Could not report invalid transcript data to background:', err); });
+        return;
+      }
+      transcriptData.forEach(item => {
+        if (!item || typeof item !== 'object') return;
+        lines.push(`### ${String(item.speaker || 'Unknown')} — ${String(item.timestamp || '?')}`);
         lines.push('');
-        lines.push(item.text);
+        lines.push(String(item.text || ''));
         lines.push('');
       });
 
-      const markdown = lines.join(NEWLINE);
+      const markdown = lines.join('\n');
 
-      chrome.runtime.sendMessage({
+      sendWithRetry({
         action: 'TRANSCRIPT_READY',
         transcript: markdown,
         itemCount: event.data.itemCount,
         length: markdown.length,
         dateFormatted: meetingInfo.dateFormatted
+      }).catch(err => {
+        console.error('[content] Failed to deliver TRANSCRIPT_READY after retries:', err);
+        chrome.runtime.sendMessage({
+          action: 'SCRAPING_ERROR',
+          error: 'Transcript collected but failed to send to background: ' + err.message
+        }).catch(err2 => console.warn('[content] Last-resort SCRAPING_ERROR also failed:', err2.message));
       });
     } else if (event.data.type === 'SCRAPING_ERROR') {
       console.error('Scraping error:', event.data.error);
-      chrome.runtime.sendMessage({
+      sendWithRetry({
         action: 'SCRAPING_ERROR',
         error: event.data.error
+      }).catch(err => {
+        console.error('[content] Failed to deliver SCRAPING_ERROR after retries:', err);
+        chrome.runtime.sendMessage({
+          action: 'SCRAPING_ERROR',
+          error: 'Original: ' + event.data.error + '. Relay failed: ' + err.message
+        }).catch(err2 => console.warn('[content] Last-resort SCRAPING_ERROR also failed:', err2.message));
       });
     }
   });
 }
 
 
-// ========== iframe（sharepoint.com）用 ==========
+// ========== iframe 用 ==========
 if (window.self !== window.top) {
   console.log('🟢 Running inside iframe:', window.location.href);
 
   window.addEventListener('message', async (event) => {
     if (!event.data || !event.data.type) return;
+    if (event.origin !== 'https://teams.microsoft.com'
+        && !(event.origin.startsWith('https://') && event.origin.endsWith('.teams.microsoft.com'))
+        && event.origin !== 'https://teams.cloud.microsoft'
+        && !(event.origin.startsWith('https://') && event.origin.endsWith('.teams.cloud.microsoft'))) return;
 
     if (event.data.type === 'START_SCRAPING_IFRAME') {
       console.log('🟢 Received scraping request in iframe');
+      const parentOrigin = event.origin;
 
       try {
         const transcriptData = [];
         const seenTexts = new Set();
-        const NEWLINE = String.fromCharCode(10);
 
         // スクロールコンテナを探す
         const scrollContainer = document.querySelector('[class*="focusZoneWithAutoScroll"]');
@@ -143,6 +194,7 @@ if (window.self !== window.top) {
 
         let lastScrollTop = -1;
         let noChangeCount = 0;
+        let skippedCount = 0;
 
         // スクロールしながら収集
         while (noChangeCount < 5) {
@@ -157,17 +209,44 @@ if (window.self !== window.top) {
             if (text && !seenTexts.has(text) && text.length > 5 && !text.includes('started transcription')) {
               seenTexts.add(text);
 
-              const lines = text.split(NEWLINE).filter(l => l.trim());
+              const lines = text.split('\n').filter(l => l.trim());
 
-              // 形式: "Speaker名", "X minutes Y seconds", "X:XX", "Speaker名 X minutes Y seconds", "実際のテキスト"
-              if (lines.length >= 5) {
-                const speaker = lines[0];
-                const timestamp = lines[2]; // "0:23" 形式
-                const content = lines.slice(4).join(' '); // 5行目以降がテキスト
+              if (lines.length >= 2) {
+                let speaker, timestamp = '', content;
+
+                if (lines.length >= 5) {
+                  // Legacy 5-line format: Speaker / RelTime / AbsTime / Label / Text...
+                  speaker = lines[0];
+                  timestamp = lines[2];
+                  content = lines.slice(4).join(' ');
+                } else {
+                  // Compact format (2-4 lines)
+                  // Line 1: "Speaker Name [relative-time]" e.g. "Mitsuki Fukunaga 3 minutes 29 seconds"
+                  // Remaining: text content (may include timestamp lines to filter)
+                  speaker = lines[0]
+                    .replace(/\s+(\d+\s+(seconds?|minutes?|hours?)\s*)+$/i, '')
+                    .trim();
+
+                  // Look for absolute timestamp (H:MM) in text
+                  const tsMatch = text.match(/(?:^|\n)(\d{1,2}:\d{2})(?:\n|$)/);
+                  if (tsMatch) timestamp = tsMatch[1];
+
+                  const contentLines = lines.slice(1).filter(l => {
+                    const t = l.trim();
+                    return !/^\d{1,2}:\d{2}$/.test(t) &&
+                           !/^(\d+\s+(seconds?|minutes?|hours?)\s*)+$/i.test(t);
+                  });
+                  content = contentLines.join(' ');
+                }
 
                 if (speaker && content) {
                   transcriptData.push({ speaker, timestamp, text: content });
                 }
+              } else if (lines.length <= 1) {
+                // Single-line or empty cell (speaker header, whitespace-only) — skip silently
+              } else {
+                console.warn('[iframe] Unexpected cell format, lines:', lines.length, cell.innerText?.slice(0, 80));
+                skippedCount++;
               }
             }
           });
@@ -187,22 +266,29 @@ if (window.self !== window.top) {
           lastScrollTop = scrollContainer.scrollTop;
         }
 
-        console.log('🟢 Scraping complete:', transcriptData.length, 'items');
+        console.log('🟢 Scraping complete:', transcriptData.length, 'items,', skippedCount, 'skipped');
 
         // 親ウィンドウに結果を送信
+        if (transcriptData.length === 0) {
+          const totalCells = document.querySelectorAll('.ms-List-cell').length;
+          window.parent.postMessage({ type: 'SCRAPING_ERROR', error: `No transcript items found. Total cells seen: ${totalCells}, skipped: ${skippedCount}` }, parentOrigin);
+          return;
+        }
         window.parent.postMessage({
           type: 'TRANSCRIPT_COLLECTED',
           transcriptData: transcriptData,
           itemCount: transcriptData.length
-        }, '*');
+        }, parentOrigin);
 
       } catch (error) {
         console.error('Scraping error:', error);
         window.parent.postMessage({
           type: 'SCRAPING_ERROR',
-          error: error.message
-        }, '*');
+          error: (error && error.message) || String(error)
+        }, parentOrigin);
       }
     }
   });
 }
+
+} // end guard
