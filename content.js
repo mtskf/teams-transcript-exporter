@@ -8,7 +8,7 @@ console.log('Is iframe?', window.self !== window.top);
 function buildMonthMap() {
   const map = {};
   for (let m = 0; m < 12; m++) {
-    const name = new Date(2000, m, 1).toLocaleString(undefined, { month: 'long' });
+    const name = new Date(2000, m, 1).toLocaleString('en-US', { month: 'long' });
     map[name] = String(m + 1).padStart(2, '0');
   }
   return map;
@@ -144,7 +144,7 @@ if (window.self === window.top) {
         chrome.runtime.sendMessage({
           action: 'SCRAPING_ERROR',
           error: 'Transcript collected but failed to send to background: ' + err.message
-        }).catch(() => {});
+        }).catch(err2 => console.warn('[content] Last-resort SCRAPING_ERROR also failed:', err2.message));
       });
     } else if (event.data.type === 'SCRAPING_ERROR') {
       console.error('Scraping error:', event.data.error);
@@ -156,7 +156,7 @@ if (window.self === window.top) {
         chrome.runtime.sendMessage({
           action: 'SCRAPING_ERROR',
           error: 'Original: ' + event.data.error + '. Relay failed: ' + err.message
-        }).catch(() => {});
+        }).catch(err2 => console.warn('[content] Last-resort SCRAPING_ERROR also failed:', err2.message));
       });
     }
   });
